@@ -23,6 +23,10 @@ details{border-top:1px solid #dce7e0;margin-top:24px;padding-top:16px}
 summary{cursor:pointer;font-weight:700}
 a{color:#205744} footer{font-size:.85rem;margin-top:20px;color:#436056}
 #status:empty{display:none}
+fieldset{border:1px solid #dce7e0;border-radius:12px;margin:20px 0 0;padding:12px 16px}
+legend{font-weight:700;padding:0 5px}
+.item-option{display:flex;align-items:center;gap:10px;margin:10px 0;font-weight:500;cursor:pointer}
+.item-option input{width:20px;height:20px;margin:0;accent-color:#205744}
 </style>
 </head>
 <body><main><section class="card" aria-labelledby="title">
@@ -38,11 +42,18 @@ a{color:#205744} footer{font-size:.85rem;margin-top:20px;color:#436056}
 <small id="chosen">Start typing, then select the full address from Google’s suggestions.</small>
 <button id="calculate" type="button" disabled>Calculate delivery price</button>
 </div>
+<fieldset>
+<legend>Item quantity · optional</legend>
+<label class="item-option"><input id="items-50-60" type="checkbox">50–60 items — add $20</label>
+<label class="item-option"><input id="items-61-70" type="checkbox">61–70 items — add $40</label>
+<small>Leave both unticked if neither range applies.</small>
+</fieldset>
 <p id="status" role="status"></p>
 <div class="quote" id="quote" aria-live="polite" hidden>
 <p class="eyebrow">Estimated delivery price · NZD</p>
 <p class="price" id="price"></p>
 <p id="breakdown"></p>
+<p id="item-charge" hidden></p>
 <p id="quote-address"></p>
 <a id="directions" target="_blank" rel="noopener" hidden>View directions on Google Maps</a>
 </div>
@@ -88,6 +99,8 @@ const origin = () => stores[store.value];
 let selected;
 let Route;
 let revision = 0;
+let lastQuote;
+const itemOptions = [byId("items-50-60"), byId("items-61-70")];
 
 function directions(address) {
   const params = new URLSearchParams({
@@ -98,6 +111,7 @@ function directions(address) {
 }
 function clearQuote() {
   revision++;
+  lastQuote = undefined;
   quote.hidden = true;
   status.textContent = "";
   calculate.disabled = !selected;
@@ -114,8 +128,12 @@ function updateStore() {
   clearQuote();
 }
 function showQuote(km, address, destination) {
-  byId("price").textContent = currency.format(km * 2 * 3.5 + 50);
+  lastQuote = { km, address, destination };
+  const itemCharge = Number(itemOptions[0].checked) * 20 + Number(itemOptions[1].checked) * 40;
+  byId("price").textContent = currency.format(km * 2 * 3.5 + 50 + itemCharge);
   byId("breakdown").textContent = distance.format(km) + " km one way × 2 × $3.50 + $50";
+  byId("item-charge").hidden = itemCharge === 0;
+  byId("item-charge").textContent = "Item quantity surcharge + " + currency.format(itemCharge);
   byId("quote-address").textContent = address;
   const link = byId("directions");
   link.hidden = !destination;
@@ -198,6 +216,7 @@ calculate.addEventListener("click", async () => {
   if (!selected) return;
   const request = ++revision;
   const customer = selected;
+  lastQuote = undefined;
   quote.hidden = true;
   calculate.disabled = true;
   status.textContent = "Finding the one-way driving distance…";
@@ -218,6 +237,10 @@ calculate.addEventListener("click", async () => {
   }
 });
 store.addEventListener("change", updateStore);
+itemOptions.forEach(option => option.addEventListener("change", () => {
+  if (option.checked) itemOptions.find(other => other !== option).checked = false;
+  if (lastQuote) showQuote(lastQuote.km, lastQuote.address, lastQuote.destination);
+}));
 manualAddress.addEventListener("input", () => { updateManualDirections(); clearQuote(); });
 byId("kilometres").addEventListener("input", clearQuote);
 byId("manual-form").addEventListener("submit", event => {
