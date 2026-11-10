@@ -6,33 +6,37 @@
 <title>Delivery Calculator</title>
 <style>
 *{box-sizing:border-box} [hidden]{display:none!important}
-body{margin:0;background:#edf3ef;color:#17312a;font:16px system-ui,sans-serif}
+body{margin:0;background:#f4f6ed;color:#26321d;font:16px system-ui,sans-serif}
 main{max-width:660px;margin:clamp(24px,8vh,80px) auto;padding:0 18px}
-.card{background:white;padding:clamp(20px,5vw,38px);border-radius:24px;box-shadow:0 14px 45px #17312a13}
-.eyebrow{letter-spacing:.15em;text-transform:uppercase;font-size:.75rem;font-weight:750;color:#3c6657;margin:0 0 8px}
+.card{background:white;padding:clamp(20px,5vw,38px);border-radius:24px;box-shadow:0 14px 45px #35471b13;border-top:7px solid #ff8014}
+.brand-logo{display:block;width:min(100%,290px);height:auto;margin:0 auto 24px}
+.eyebrow{letter-spacing:.15em;text-transform:uppercase;font-size:.75rem;font-weight:750;color:#526d28;margin:0 0 8px}
 h1{font-size:clamp(2rem,6vw,3rem);line-height:1.05;letter-spacing:-.045em;margin:0}
-p{line-height:1.5} .muted,small{color:#436056} label,.label{display:block;font-weight:700;margin:18px 0 7px}
+p{line-height:1.5} .muted,small{color:#526044} label,.label{display:block;font-weight:700;margin:18px 0 7px}
 select,input,button,gmp-place-autocomplete{width:100%;font:inherit}
 select,input,button{padding:12px;border:1px solid #9eb4a8;border-radius:10px;background:white;color:inherit}
-button{background:#205744;color:white;border:0;font-weight:700;cursor:pointer;margin-top:14px}
+button{background:#526f29;color:white;border:0;font-weight:700;cursor:pointer;margin-top:14px}
+select:focus-visible,input:focus-visible,button:focus-visible{outline:3px solid #ff8014;outline-offset:3px}
+gmp-place-autocomplete{color-scheme:light}
 button:disabled{opacity:.55;cursor:default}
 small{display:block;margin-top:7px}
-.quote{background:#e5f2e9;border-radius:16px;padding:18px;margin-top:24px}
+.quote{background:#f0f6e5;border:1px solid #7fa33d;border-left:6px solid #ff8014;border-radius:16px;padding:18px;margin-top:24px}
 .quote p{margin:4px 0}.price{font-size:2.7rem;font-weight:800;letter-spacing:-.045em}
 details{border-top:1px solid #dce7e0;margin-top:24px;padding-top:16px}
 summary{cursor:pointer;font-weight:700}
-a{color:#205744} footer{font-size:.85rem;margin-top:20px;color:#436056}
+a{color:#4b6725} footer{font-size:.85rem;margin-top:20px;color:#526044}
 #status:empty{display:none}
-fieldset{border:1px solid #dce7e0;border-radius:12px;margin:20px 0 0;padding:12px 16px}
+fieldset{border:1px solid #efc49c;background:#fff8f0;border-radius:12px;margin:20px 0 0;padding:12px 16px}
 legend{font-weight:700;padding:0 5px}
 .item-option{display:flex;align-items:center;gap:10px;margin:10px 0;font-weight:500;cursor:pointer}
-.item-option input{width:20px;height:20px;margin:0;accent-color:#205744}
+.item-option input{width:20px;height:20px;margin:0;accent-color:#526f29}
 </style>
 </head>
 <body><main><section class="card" aria-labelledby="title">
+<img class="brand-logo" src="logo.png" alt="DIY Supply — Restoring the past, Building the future" width="1080" height="765">
 <p class="eyebrow">Hamilton / Tauranga</p>
 <h1 id="title">Delivery calculator</h1>
-<p class="muted">Choose a store and select a customer address to get a delivery quote in NZD.</p>
+<p class="muted">Choose a store and select a customer address. Your delivery quote appears automatically in NZD.</p>
 <label for="store">Dispatch store</label>
 <select id="store"><option value="hamilton">Hamilton</option><option value="tauranga">Tauranga</option></select>
 <small id="origin"></small>
@@ -40,7 +44,6 @@ legend{font-weight:700;padding:0 5px}
 <span class="label" id="address-label">Customer address</span>
 <div id="autocomplete"></div>
 <small id="chosen">Start typing, then select the full address from Google’s suggestions.</small>
-<button id="calculate" type="button" disabled>Calculate delivery price</button>
 </div>
 <fieldset>
 <legend>Item quantity · optional</legend>
@@ -90,7 +93,6 @@ const stores = {
 const byId = id => document.getElementById(id);
 const store = byId("store");
 const status = byId("status");
-const calculate = byId("calculate");
 const quote = byId("quote");
 const manualAddress = byId("manual-address");
 const currency = new Intl.NumberFormat("en-NZ", { style: "currency", currency: "NZD" });
@@ -114,7 +116,6 @@ function clearQuote() {
   lastQuote = undefined;
   quote.hidden = true;
   status.textContent = "";
-  calculate.disabled = !selected;
 }
 function updateManualDirections() {
   const address = manualAddress.value.trim();
@@ -126,6 +127,7 @@ function updateStore() {
   byId("origin").textContent = origin();
   updateManualDirections();
   clearQuote();
+  if (selected) calculateQuote();
 }
 function showQuote(km, address, destination) {
   lastQuote = { km, address, destination };
@@ -197,7 +199,7 @@ byId("key-form").addEventListener("submit", async event => {
         if (!place.location) throw new Error("Missing location");
         selected = { location: place.location, label: place.formattedAddress || prediction };
         byId("chosen").textContent = "Selected: " + selected.label;
-        calculate.disabled = false;
+        await calculateQuote();
       } catch {
         if (lookup === addressLookup) status.textContent = "Could not confirm that address. Try selecting it again.";
       }
@@ -212,13 +214,12 @@ byId("key-form").addEventListener("submit", async event => {
   }
 });
 let addressLookup = 0;
-calculate.addEventListener("click", async () => {
+async function calculateQuote() {
   if (!selected) return;
   const request = ++revision;
   const customer = selected;
   lastQuote = undefined;
   quote.hidden = true;
-  calculate.disabled = true;
   status.textContent = "Finding the one-way driving distance…";
   try {
     const { routes } = await Route.computeRoutes({
@@ -232,10 +233,8 @@ calculate.addEventListener("click", async () => {
     status.textContent = "";
   } catch {
     if (request === revision) status.textContent = "No driving distance was returned. Check the address and Routes API access, or enter the distance manually.";
-  } finally {
-    if (request === revision) calculate.disabled = !selected;
   }
-});
+}
 store.addEventListener("change", updateStore);
 itemOptions.forEach(option => option.addEventListener("change", () => {
   if (option.checked) itemOptions.find(other => other !== option).checked = false;
