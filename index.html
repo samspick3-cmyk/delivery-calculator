@@ -30,6 +30,10 @@ fieldset{border:1px solid #efc49c;background:#fff8f0;border-radius:12px;margin:2
 legend{font-weight:700;padding:0 5px}
 .item-option{display:flex;align-items:center;gap:10px;margin:10px 0;font-weight:500;cursor:pointer}
 .item-option input{width:20px;height:20px;margin:0;accent-color:#526f29}
+.access-view{margin-top:24px}
+.access-view h2{font-size:1.15rem;margin:0 0 8px}
+#access-map{height:360px;width:100%;border-radius:12px;border:1px solid #dce7e0}
+.access-view p{margin:8px 0}
 </style>
 </head>
 <body><main><section class="card" aria-labelledby="title">
@@ -60,6 +64,14 @@ legend{font-weight:700;padding:0 5px}
 <p id="quote-address"></p>
 <a id="directions" target="_blank" rel="noopener" hidden>View directions on Google Maps</a>
 </div>
+<section id="access-view" class="access-view" aria-labelledby="access-heading" hidden>
+<h2 id="access-heading">Delivery access · satellite view</h2>
+<p id="map-address" class="muted"></p>
+<div id="access-map" aria-label="Satellite map of the selected delivery address"></div>
+<p id="map-status" role="status"></p>
+<small>Zoom and move around to inspect the driveway and surrounding access. The orange circle marks the selected address.</small>
+<p><a id="satellite-link" target="_blank" rel="noopener">Open satellite view in Google Maps</a></p>
+</section>
 <details id="setup" open>
 <summary>Connect Google Maps for address autofill</summary>
 <form id="key-form">
@@ -100,6 +112,8 @@ const distance = new Intl.NumberFormat("en-NZ", { maximumFractionDigits: 3 });
 const origin = () => stores[store.value];
 let selected;
 let Route;
+let accessMap;
+let addressCircle;
 let revision = 0;
 let lastQuote;
 const itemOptions = [byId("items-50-60"), byId("items-61-70")];
@@ -142,6 +156,40 @@ function showQuote(km, address, destination) {
   if (destination) link.href = directions(destination);
   quote.hidden = false;
 }
+async function showSatelliteView(customer) {
+  const section = byId("access-view");
+  const mapStatus = byId("map-status");
+  section.hidden = false;
+  byId("map-address").textContent = customer.label;
+  mapStatus.textContent = "Loading satellite view…";
+  const coordinates = customer.location.lat() + "," + customer.location.lng();
+  byId("satellite-link").href = "https://www.google.com/maps/@?" + new URLSearchParams({
+    api: "1", map_action: "map", center: coordinates, zoom: "19", basemap: "satellite"
+  });
+  try {
+    const { Map, Circle } = await google.maps.importLibrary("maps");
+    if (selected !== customer) return;
+    const camera = { center: customer.location, zoom: 19, tilt: 0, mapTypeId: "satellite" };
+    if (!accessMap) {
+      accessMap = new Map(byId("access-map"), {
+        ...camera, streetViewControl: false, fullscreenControl: true,
+        gestureHandling: "cooperative", mapTypeControl: true,
+        mapTypeControlOptions: { mapTypeIds: ["satellite", "hybrid", "roadmap"] }
+      });
+      addressCircle = new Circle({
+        map: accessMap, center: customer.location, radius: 4,
+        strokeColor: "#ff8014", strokeWeight: 3,
+        fillColor: "#ff8014", fillOpacity: 0.25, clickable: false
+      });
+    } else {
+      accessMap.setOptions(camera);
+      addressCircle.setCenter(customer.location);
+    }
+    mapStatus.textContent = "";
+  } catch {
+    if (selected === customer) mapStatus.textContent = "The embedded map couldn’t load. Use the Google Maps link below to inspect the address.";
+  }
+}
 function loadMaps(key) {
   return new Promise((resolve, reject) => {
     const script = document.createElement("script");
@@ -180,6 +228,7 @@ byId("key-form").addEventListener("submit", async event => {
     autocomplete.setAttribute("aria-labelledby", "address-label");
     autocomplete.addEventListener("input", () => {
       selected = undefined;
+      byId("access-view").hidden = true;
       byId("chosen").textContent = "Select the full address from Google’s suggestions.";
       clearQuote();
     });
@@ -188,6 +237,7 @@ byId("key-form").addEventListener("submit", async event => {
     });
     autocomplete.addEventListener("gmp-select", async ({ placePrediction }) => {
       selected = undefined;
+      byId("access-view").hidden = true;
       clearQuote();
       const place = placePrediction.toPlace();
       const lookup = ++addressLookup;
@@ -199,6 +249,7 @@ byId("key-form").addEventListener("submit", async event => {
         if (!place.location) throw new Error("Missing location");
         selected = { location: place.location, label: place.formattedAddress || prediction };
         byId("chosen").textContent = "Selected: " + selected.label;
+        showSatelliteView(selected);
         await calculateQuote();
       } catch {
         if (lookup === addressLookup) status.textContent = "Could not confirm that address. Try selecting it again.";
@@ -246,6 +297,7 @@ byId("manual-form").addEventListener("submit", event => {
   event.preventDefault();
   const km = byId("kilometres").valueAsNumber;
   if (!Number.isFinite(km) || km < 0) return;
+  byId("access-view").hidden = true;
   clearQuote();
   const address = manualAddress.value.trim();
   showQuote(km, address, address ? address + ", New Zealand" : "");
