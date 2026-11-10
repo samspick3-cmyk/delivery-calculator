@@ -69,6 +69,7 @@ a{color:#205744} footer{font-size:.85rem;margin-top:20px;color:#436056}
 </details>
 <footer>One-way driving distance × 2 × $3.50 + $50</footer>
 </section></main>
+<script src="config.js"></script>
 <script>
 "use strict";
 const stores = {
@@ -228,6 +229,10 @@ byId("manual-form").addEventListener("submit", event => {
   showQuote(km, address, address ? address + ", New Zealand" : "");
 });
 updateStore();
+if (window.DELIVERY_MAPS_KEY) {
+  byId("key").value = window.DELIVERY_MAPS_KEY;
+  byId("key-form").requestSubmit();
+}
 </script>
 </body>
 </html>
