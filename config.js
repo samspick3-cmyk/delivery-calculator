@@ -1,2 +1,2 @@
-// Paste your website-restricted Google Maps browser key between the quotes.
-window.DELIVERY_MAPS_KEY = "AIzaSyCzcTHpRZYDQ-UAeBTCDrD9I_BVy4-WpbQ";
+// Website-restricted browser key for the delivery calculator.
+window.DELIVERY_MAPS_KEY = "AIzaSyDOp8W4zQqra2djfEbRX97o5rug-klpI_M";
